@@ -120,6 +120,7 @@ ${AUTO_SPIN ? `
         dvd.className = "dvd";
         dvd.style.width = width + "px";
         dvd.style.height = height + "px";
+        dvd.style.transform = "translate(-50%, -50%)" + (AUTO_SPIN ? " rotateY(0deg)" : "");
 
         // Front face
         const front = document.createElement("div");
