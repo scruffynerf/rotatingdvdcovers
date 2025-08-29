@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         3D DVD Covers
 // @namespace    https://github.com/scruffynerf/rotatingdvdcovers
-// @version      1.2
+// @version      1.3
 // @description  3D DVD covers, hover rotation, spine titles, checkboxes clickable, glow when selected
 // @match        *://localhost:9999/groups*
 // @grant        none
@@ -189,6 +189,15 @@
                 const deg = (elapsed / 8000) * 360;
                 dvd.style.animation = '';
                 dvd.style.transform = `rotateY(${deg % 360}deg)`;
+            });
+        }
+
+        if (AUTO_SPIN) {
+            thumbnail.addEventListener('mouseenter', () => {
+                dvd.style.animationPlayState = 'paused';
+            });
+            thumbnail.addEventListener('mouseleave', () => {
+                dvd.style.animationPlayState = 'running';
             });
         }
 
