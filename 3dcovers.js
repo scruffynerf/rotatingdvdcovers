@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         3D DVD Covers Centered & Responsive
+// @name         3D DVD Covers
 // @namespace    https://github.com/scruffynerf/rotatingdvdcovers
-// @version      1.1
-// @description  3D DVD covers with both spine titles, fully responsive, dynamically scaled
+// @version      1.2
+// @description  3D DVD covers, hover rotation, spine titles, checkboxes clickable, glow when selected
 // @match        *://localhost:9999/groups*
 // @grant        none
 // ==/UserScript==
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    const AUTO_SPIN = true; // true or false
+    const AUTO_SPIN = false; // true = spins automatically, false = spins on hover
     const MAX_FONT_SIZE = 96;
 
     const style = document.createElement("style");
@@ -22,31 +22,27 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  pointer-events: none;
   z-index: 2;
+  pointer-events: none; /* allow clicks to pass through */
 }
 
 .dvd-container {
   position: relative;
   perspective: 1000px;
-  filter: drop-shadow(5px 5px 5px rgba(0,0,0,.3));
-  pointer-events: auto;
 }
 
 .dvd {
   transform-style: preserve-3d;
   transform-origin: center center;
   transform: rotateY(0deg);
+  pointer-events: none; /* cube faces don't block clicks */
+  ${AUTO_SPIN ? 'animation: rotation-3d 8s infinite linear;' : ''}
+  transition: box-shadow 0.2s ease;
 }
 
-${AUTO_SPIN ? `
-.dvd {
-  animation: rotation-3d 8s infinite linear;
+.dvd.glow {
+  box-shadow: 0 0 20px 5px gold;
 }
-.dvd-container:hover .dvd {
-  animation-play-state: paused;
-}
-` : ''}
 
 @keyframes rotation-3d {
   from { transform: rotateY(0deg); }
@@ -58,15 +54,6 @@ ${AUTO_SPIN ? `
   backface-visibility: hidden;
   background-size: cover;
   background-position: center;
-}
-
-.dvd div.front::after {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(to bottom right, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
-  pointer-events: none;
 }
 
 .dvd div.left, .dvd div.right {
@@ -87,16 +74,16 @@ ${AUTO_SPIN ? `
     document.head.appendChild(style);
 
     function createDVD(img) {
+        if (!img.src) return;
         const src = img.src;
-        if (!src) return;
         const backSrc = src.replace("frontimage", "backimage");
         const title = img.alt || "";
 
         img.style.opacity = "0";
-        const parent = img.parentNode;
-        parent.style.position = "relative";
 
-        let dvdRightTitle = null;
+        const thumbnail = img.closest('.thumbnail-section');
+        if (!thumbnail) return;
+        thumbnail.style.position = "relative";
 
         const dvdWrapper = document.createElement("div");
         dvdWrapper.className = "dvd-wrapper";
@@ -121,12 +108,11 @@ ${AUTO_SPIN ? `
         dvd.append(front, back, left, right, top, bottom);
         container.appendChild(dvd);
         dvdWrapper.appendChild(container);
-        parent.appendChild(dvdWrapper);
+        thumbnail.appendChild(dvdWrapper);
 
         function resizeCube() {
-            const rect = img.getBoundingClientRect();
-            const width = rect.width;
-            const height = rect.height;
+            const width = img.clientWidth;
+            const height = img.clientHeight;
             if (width === 0 || height === 0) return;
 
             const spine = Math.max(12, Math.round(width * 0.1));
@@ -149,29 +135,26 @@ ${AUTO_SPIN ? `
             left.style.transform = `rotateY(-90deg) translateZ(${halfSpine}px)`;
             left.style.borderTop = left.style.borderBottom = "2px solid #000";
 
-            let targetSize = MAX_FONT_SIZE;
+            let fontSize = MAX_FONT_SIZE;
+            leftTitle.style.fontSize = fontSize + "px";
             leftTitle.style.whiteSpace = "nowrap";
             leftTitle.style.transform = "none";
-            leftTitle.style.fontSize = targetSize + "px";
 
-            const maxHeight = spine;
-            const maxWidth = height;
-
-            while ((leftTitle.offsetHeight > maxHeight || leftTitle.scrollWidth > maxWidth) && targetSize > 1) {
-                targetSize -= 1;
-                leftTitle.style.fontSize = targetSize + "px";
+            while ((leftTitle.offsetHeight > spine || leftTitle.scrollWidth > height) && fontSize > 1) {
+                fontSize--;
+                leftTitle.style.fontSize = fontSize + "px";
             }
-
             leftTitle.style.transform = "rotate(90deg)";
 
-            if (!dvdRightTitle) {
-                dvdRightTitle = document.createElement("span");
-                dvdRightTitle.textContent = title;
-                right.appendChild(dvdRightTitle);
+            if (!right.querySelector('span')) {
+                const rightTitle = document.createElement("span");
+                rightTitle.textContent = title;
+                right.appendChild(rightTitle);
             }
-            dvdRightTitle.style.fontSize = leftTitle.style.fontSize;
-            dvdRightTitle.style.transform = "rotate(90deg)";
-            dvdRightTitle.style.whiteSpace = "nowrap";
+            const rightTitle = right.querySelector('span');
+            rightTitle.style.fontSize = leftTitle.style.fontSize;
+            rightTitle.style.transform = "rotate(90deg)";
+            rightTitle.style.whiteSpace = "nowrap";
 
             right.style.width = spine + "px";
             right.style.height = height + "px";
@@ -191,27 +174,52 @@ ${AUTO_SPIN ? `
 
         const roImg = new ResizeObserver(resizeCube);
         roImg.observe(img);
-        const roParent = new ResizeObserver(resizeCube);
-        roParent.observe(parent);
         window.addEventListener("resize", resizeCube);
         resizeCube();
 
-        // Hover animation for AUTO_SPIN false with persistent rotation
+        // Hover logic for AUTO_SPIN false
         if (!AUTO_SPIN) {
             let startTime = 0;
-
-            container.addEventListener('mouseenter', () => {
+            thumbnail.addEventListener('mouseenter', () => {
                 startTime = performance.now();
                 dvd.style.animation = 'rotation-3d 8s infinite linear';
             });
-
-            container.addEventListener('mouseleave', () => {
+            thumbnail.addEventListener('mouseleave', () => {
                 const elapsed = performance.now() - startTime;
                 const deg = (elapsed / 8000) * 360;
                 dvd.style.animation = '';
                 dvd.style.transform = `rotateY(${deg % 360}deg)`;
             });
         }
+
+        // ------------------------------
+        // Checkbox detection and glow
+        // ------------------------------
+        const card = img.closest('.group-card');
+        if (!card) return;
+        const checkbox = card.querySelector('.card-check');
+        if (!checkbox) return;
+
+        function updateGlow() {
+            if (checkbox.checked) dvd.classList.add('glow');
+            else dvd.classList.remove('glow');
+        }
+
+        // Initial state
+        updateGlow();
+
+        // Direct checkbox changes
+        const observer = new MutationObserver(muts => {
+            muts.forEach(m => {
+                if (m.attributeName === 'checked') updateGlow();
+            });
+        });
+        observer.observe(checkbox, { attributes: true, attributeFilter: ['checked'] });
+
+        // Indirect changes via card clicks
+        card.addEventListener('click', () => {
+            setTimeout(updateGlow, 0); // ensure checkbox state updated
+        });
     }
 
     function process() {
