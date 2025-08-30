@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         3D DVD Covers
 // @namespace    https://github.com/scruffynerf/rotatingdvdcovers
-// @version      1.4
-// @description  3D DVD covers, hover rotation, spine titles, checkboxes clickable, glow when selected
+// @version      1.5
+// @description  3D DVD covers, hover rotation, spine titles, checkboxes clickable, glow when selected, dvd case improved
 // @match        *://localhost:9999/groups*
 // @grant        none
 // ==/UserScript==
@@ -14,10 +14,11 @@
     // CONFIGURATION
     // ===============================
     const CONFIG = {
-        AUTO_SPIN: false,           // true = spins automatically, false = spins on hover
+        AUTO_SPIN: true,            // true = spins automatically, false = spins on hover
+        RANDOM_START: false,        // true = starting point varies, false = all face front at start
         MAX_FONT_SIZE: 48,          // maximum font size for spine titles
         GLOW_COLOR: 'gold',         // glow color when checkbox is selected
-        ROTATION_DURATION: 6,       // rotation speed in seconds (matches CSS animation duration)
+        ROTATION_DURATION: 8,       // rotation speed in seconds (matches CSS animation duration)
         SPINE_RATIO: 0.1,           // fraction of width to use for spine thickness
         MIN_SPINE: 12               // minimum spine width in px
     };
@@ -84,7 +85,22 @@
   display: inline-block;
 }
 .dvd-top, .dvd-bottom { background-color: #222; }
+
+.dvd-front, .dvd-back {
+  border-style: solid;
+  background-color: #222; /* plastic fallback */
+  background-image:
+    repeating-radial-gradient(
+      circle at center,
+      rgba(255,255,255,0.08) 0px,
+      rgba(255,255,255,0.08) 2px,
+      transparent 3px,
+      transparent 6px
+    );
+  background-size: cover;
+}
 `;
+
         document.head.appendChild(style);
     }
 
@@ -142,8 +158,38 @@
             // Front/back
             front.style.width = back.style.width = width + "px";
             front.style.height = back.style.height = height + "px";
-            front.style.backgroundImage = `url('${src}')`;
-            back.style.backgroundImage = `url('${backSrc}')`;
+
+            // new: create a bounded, multi-stop radial (concentric rings) sized to the cover width
+            const ringGradient = `radial-gradient(
+              circle at center,
+              rgba(255,255,255,0.22) 0%,
+              rgba(255,255,255,0.18) 4%,
+              transparent 6%,
+              rgba(255,255,255,0.06) 20%,
+              transparent 22%,
+              rgba(255,255,255,0.04) 40%,
+              transparent 42%
+            )`;
+
+            front.style.backgroundImage = `${ringGradient}, url('${src}')`;
+            back.style.backgroundImage  = `${ringGradient}, url('${backSrc}')`;
+
+            const circleSize = Math.max(width, height);
+
+            // stacked: first layer = ring (constrained below), second layer = cover image
+            front.style.backgroundImage = `${ringGradient}, url('${src}')`;
+            back.style.backgroundImage  = `${ringGradient}, url('${backSrc}')`;
+
+            // make sure neither layer repeats, and center both
+            front.style.backgroundRepeat = 'no-repeat, no-repeat';
+            back.style.backgroundRepeat  = 'no-repeat, no-repeat';
+            front.style.backgroundPosition = 'center center, center center';
+            back.style.backgroundPosition  = 'center center, center center';
+
+            // circle sized to the larger dimension, centered
+            front.style.backgroundSize = `${circleSize}px ${circleSize}px, ${width}px ${height}px`;
+            back.style.backgroundSize  = `${circleSize}px ${circleSize}px, ${width}px ${height}px`;
+
             front.style.transform = `rotateY(0deg) translateZ(${halfSpine}px)`;
             back.style.transform = `rotateY(180deg) translateZ(${halfSpine}px)`;
             front.style.borderTop = front.style.borderRight = front.style.borderBottom = "2px solid #000";
@@ -294,6 +340,17 @@
 
         // Setup behaviors
         setupResize(img, elements, title, src, backSrc);
+        if (CONFIG.RANDOM_START) {
+           const offsetDeg = Math.floor(Math.random() * 360);
+           if (CONFIG.AUTO_SPIN) {
+              // shift animation start time by using negative delay
+              const offsetSec = (offsetDeg / 360) * CONFIG.ROTATION_DURATION;
+              elements.dvd.style.animationDelay = `-${offsetSec}s`;
+           } else {
+                // just set initial rotation transform
+                elements.dvd.style.transform = `rotateY(${offsetDeg}deg)`;
+           }
+        }
         setupRotation(thumbnail, elements.dvd);
 
         const card = img.closest('.group-card');
